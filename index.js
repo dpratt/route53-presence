@@ -56,7 +56,7 @@ function updateRecord(zoneId, dnsName, records, cb) {
           Name: dnsName,
           Type: 'A',
           ResourceRecords: records,
-          TTL: 300
+          TTL: 60
         }
       }]
     }
@@ -76,7 +76,7 @@ function deleteRecord(zoneId, dnsName, records, cb) {
           Name: dnsName,
           Type: 'A',
           ResourceRecords: records,
-          TTL: 300
+          TTL: 60
         }
       }]
     }
@@ -172,17 +172,18 @@ if(!dnsName) {
 let _exitInProgress = false;
 
 function _exitProcess(address) {
-  if (!_exitInProgress) {
-    _exitInProgress = true;
-    //we get 5 seconds to delete it, otherwise we die
-    setTimeout(function() { console.log("Timed out waiting for delete. Exiting."); process.exit(-1); }, 5000).unref();
-
-    removeAddress(zoneId, dnsName, address, function(err) {
-      if (err) {return _handleError(err); }
-      console.log("Address removed.");
-      process.exit(0);
-    })
-  }
+  process.exit(0)
+  // if (!_exitInProgress) {
+  //   _exitInProgress = true;
+  //   //we get 5 seconds to delete it, otherwise we die
+  //   setTimeout(function() { console.log("Timed out waiting for delete. Exiting."); process.exit(-1); }, 5000).unref();
+  //
+  //   removeAddress(zoneId, dnsName, address, function(err) {
+  //     if (err) {return _handleError(err); }
+  //     console.log("Address removed.");
+  //     process.exit(0);
+  //   })
+  // }
 }
 
 getPrivateIP(function(err, privateIp) {
