@@ -11,11 +11,11 @@ const route53 = new AWS.Route53();
 const metadata = new AWS.MetadataService();
 
 function getPrivateIP(cb) {
-  const timeout = setTimeout(function() { 
-    _handleError("Timed out looking for instance metadata. Exiting."); 
+  const timeout = setTimeout(function() {
+    _handleError("Timed out looking for instance metadata. Exiting.");
   }, 2000);
   timeout.unref();
-  
+
   metadata.request('/latest/meta-data/local-ipv4', function(err, data) {
     clearTimeout(timeout);
     if (err) { return cb(err); }
@@ -40,8 +40,8 @@ function getAddresses(zoneId, dnsName, cb) {
     }
     if(data.ResourceRecordSets.length == 0 || data.ResourceRecordSets[0].Name != recordName) {
       cb(null, null);
-    } else {      
-      cb(null, data.ResourceRecordSets[0].ResourceRecords);          
+    } else {
+      cb(null, data.ResourceRecordSets[0].ResourceRecords);
     }
   });
 }
@@ -62,8 +62,8 @@ function updateRecord(zoneId, dnsName, records, cb) {
     }
   };
   console.log("Updating hostname: " + dnsName + " addresses: " + JSON.stringify(records));
-  
-  route53.changeResourceRecordSets(params, cb);      
+
+  route53.changeResourceRecordSets(params, cb);
 }
 
 function deleteRecord(zoneId, dnsName, records, cb) {
@@ -75,26 +75,34 @@ function deleteRecord(zoneId, dnsName, records, cb) {
         ResourceRecordSet: {
           Name: dnsName,
           Type: 'A',
-          ResourceRecords: records,          
-          TTL: 300          
+          ResourceRecords: records,
+          TTL: 300
         }
       }]
     }
   };
   console.log("Deleting " + dnsName);
-  
-  route53.changeResourceRecordSets(params, cb);      
+
+  route53.changeResourceRecordSets(params, cb);
 }
 
 
-function addAddress(zoneId, dnsName, address, cb) {  
+function setAddress(zoneId, dnsName, address, cb) {
+  getAddresses(zoneId, dnsName, function(err, addresses) {
+    if(err) { return cb(err); }
+    console.log("Setting address for " + dnsName + " to " + address);
+    updateRecord(zoneId, dnsName, [{ Value: address }], cb);
+  });
+}
+
+function appendAddress(zoneId, dnsName, address, cb) {
   getAddresses(zoneId, dnsName, function(err, addresses) {
     if(err) { return cb(err); }
     console.log("Adding address " + address + " to " + dnsName);
     if(addresses == null) {
       //the record does not exist - we need to create it
       console.log("Creating DNS entry for " + dnsName);
-      updateRecord(zoneId, dnsName, [{ Value: address }], cb)      
+      updateRecord(zoneId, dnsName, [{ Value: address }], cb)
     } else {
       const existingIndex = addresses.findIndex(function(elem) {
         return elem.Value == address;
@@ -102,14 +110,15 @@ function addAddress(zoneId, dnsName, address, cb) {
       if(existingIndex == -1) {
         //the address is not present in the list
         addresses.push({ Value: address });
-        updateRecord(zoneId, dnsName, addresses, cb);            
+        updateRecord(zoneId, dnsName, addresses, cb);
       } else {
         console.log("Instance private IP already in list. Skipping operation.");
         cb(null, {});
-      }      
+      }
     }
   });
 }
+
 
 function removeAddress(zoneId, dnsName, address, cb) {
   getAddresses(zoneId, dnsName, function(err, addresses) {
@@ -117,7 +126,7 @@ function removeAddress(zoneId, dnsName, address, cb) {
     if(addresses == null) {
       //entry does not exist, so skip deletion.
       console.log("No DNS entry found for " + dnsName + ", skipping removal operation.");
-      cb(null, {});      
+      cb(null, {});
     } else {
       const existingIndex = addresses.findIndex(function(elem) {
         return elem.Value == address;
@@ -127,16 +136,16 @@ function removeAddress(zoneId, dnsName, address, cb) {
           //removing the address would empty the record, delete it instead
           console.log("Deleting DNS record " + dnsName);
           //the aws API requires the current, existing ResourceRecords for a DELETE request
-          deleteRecord(zoneId, dnsName, addresses, cb);                    
+          deleteRecord(zoneId, dnsName, addresses, cb);
         } else {
-          addresses.splice(existingIndex, 1);        
+          addresses.splice(existingIndex, 1);
           console.log("Updating " + dnsName + " with addresses " + JSON.stringify(addresses));
-          updateRecord(zoneId, dnsName, addresses, cb);                    
+          updateRecord(zoneId, dnsName, addresses, cb);
         }
       } else {
         console.log("Instance private IP not in Route53 record. Skipping operation.");
         cb(null, {});
-      }      
+      }
     }
   });
 }
@@ -167,11 +176,11 @@ function _exitProcess(address) {
     _exitInProgress = true;
     //we get 5 seconds to delete it, otherwise we die
     setTimeout(function() { console.log("Timed out waiting for delete. Exiting."); process.exit(-1); }, 5000).unref();
-    
+
     removeAddress(zoneId, dnsName, address, function(err) {
       if (err) {return _handleError(err); }
       console.log("Address removed.");
-      process.exit(0);      
+      process.exit(0);
     })
   }
 }
@@ -179,9 +188,9 @@ function _exitProcess(address) {
 getPrivateIP(function(err, privateIp) {
   if (err) {return _handleError(err); }
   console.log("Local private IP " + privateIp + " detected. Updating Route53 record.");
-  addAddress(zoneId, dnsName, privateIp, function(err) {
+  setAddress(zoneId, dnsName, privateIp, function(err) {
     if (err) {return _handleError(err); }
-    
+
     //make sure we deregister this address before we exit
     process.on('SIGINT', function() {
       console.log('Received SIGINT. Exiting...');
@@ -192,7 +201,7 @@ getPrivateIP(function(err, privateIp) {
       console.log('Received SIGTERM. Exiting...');
       _exitProcess(privateIp);
     });
-    
+
     console.log("Update successful. Waiting for termination.")
     _waitForever();
   });
